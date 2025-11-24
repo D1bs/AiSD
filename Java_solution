@@ -1,0 +1,332 @@
+import java.util.*;
+
+public class Main {
+    private static long comparisonCount = 0;
+    private static int memoryUsage = 0;
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.println("Введите данные в формате: nums = [x,y,z] maxValue = a maxCount = b maxMemory = c");
+        System.out.println("Пример: nums = [3,1,2] maxValue = 100 maxCount = 1000 maxMemory = 1000");
+        System.out.print("Ввод: ");
+
+        String input = scanner.nextLine();
+
+        try {
+            int[] nums = parseArray(input, "nums = ");
+            int maxValue = parseInt(input, "maxValue = ");
+            long maxCount = parseLong(input, "maxCount = ");
+            int maxMemory = parseInt(input, "maxMemory = ");
+
+            int[] result = sortWithConstraints(nums, maxValue, maxCount, maxMemory);
+
+            System.out.print("Вывод: ");
+            for (int i = 0; i < result.length; i++) {
+                if (i > 0) System.out.print(" ");
+                System.out.print(result[i]);
+            }
+            System.out.println();
+
+        } catch (Exception e) {
+            System.out.println("Ошибка: " + e.getMessage());
+        }
+
+        scanner.close();
+    }
+
+    public static int[] sortWithConstraints(int[] nums, int maxValue, long maxCount, int maxMemory) {
+        int n = nums.length;
+
+        comparisonCount = 0;
+        memoryUsage = 0;
+
+        int minValue = Integer.MAX_VALUE;
+        for (int num : nums) {
+            if (num < minValue) minValue = num;
+        }
+
+        if (canUseCountingSort(n, minValue, maxValue, maxMemory)) {
+            return countingSort(nums, minValue, maxValue, maxCount, maxMemory);
+        } else if (canUseRadixSort(n, maxMemory)) {
+            return radixSort(nums, maxCount, maxMemory);
+        } else if (maxMemory >= n) {
+            return mergeSort(nums, 0, nums.length - 1, maxCount, maxMemory);
+        } else {
+            if (n <= 1000 && maxCount >= (long) n * n / 2) {
+                return insertionSort(nums, maxCount);
+            } else {
+                return heapSort(nums, maxCount);
+            }
+        }
+    }
+
+    private static boolean canUseCountingSort(int n, int minValue, int maxValue, int maxMemory) {
+        long range = (long) maxValue - minValue + 1;
+        return range <= maxMemory / 2 && range <= 200000;
+    }
+
+    private static boolean canUseRadixSort(int n, int maxMemory) {
+        return n * 2 <= maxMemory;
+    }
+
+    private static int[] countingSort(int[] nums, int minValue, int maxValue, long maxCount, int maxMemory) {
+        int range = maxValue - minValue + 1;
+
+        memoryUsage += range;
+        if (memoryUsage > maxMemory) {
+            throw new RuntimeException("Превышено ограничение памяти");
+        }
+
+        int[] count = new int[range];
+        int[] output = new int[nums.length];
+        memoryUsage += nums.length;
+
+        for (int num : nums) {
+            count[num - minValue]++;
+        }
+
+        for (int i = 1; i < range; i++) {
+            count[i] += count[i - 1];
+            comparisonCount++;
+            if (comparisonCount > maxCount) {
+                throw new RuntimeException("Превышено ограничение сравнений");
+            }
+        }
+
+        for (int i = nums.length - 1; i >= 0; i--) {
+            int num = nums[i];
+            int pos = count[num - minValue] - 1;
+            output[pos] = num;
+            count[num - minValue]--;
+        }
+
+        return output;
+    }
+
+    private static int[] radixSort(int[] nums, long maxCount, int maxMemory) {
+        int[] arr = nums.clone();
+        memoryUsage += arr.length;
+
+        int max = Math.abs(arr[0]);
+        for (int i = 1; i < arr.length; i++) {
+            if (Math.abs(arr[i]) > max) max = Math.abs(arr[i]);
+        }
+
+        for (int exp = 1; max / exp > 0; exp *= 10) {
+            arr = countingSortForRadix(arr, exp, maxCount, maxMemory);
+        }
+
+        return arr;
+    }
+
+    private static int[] countingSortForRadix(int[] arr, int exp, long maxCount, int maxMemory) {
+        int n = arr.length;
+        int[] output = new int[n];
+        int[] count = new int[19]; // от -9 до 9
+
+        memoryUsage += n + 19;
+        if (memoryUsage > maxMemory) {
+            throw new RuntimeException("Превышено ограничение памяти");
+        }
+
+        for (int i = 0; i < n; i++) {
+            int digit = (arr[i] / exp) % 10;
+            count[digit + 9]++;
+        }
+
+        for (int i = 1; i < 19; i++) {
+            count[i] += count[i - 1];
+            comparisonCount++;
+            if (comparisonCount > maxCount) {
+                throw new RuntimeException("Превышено ограничение сравнений");
+            }
+        }
+
+        for (int i = n - 1; i >= 0; i--) {
+            int digit = (arr[i] / exp) % 10;
+            output[count[digit + 9] - 1] = arr[i];
+            count[digit + 9]--;
+        }
+
+        return output;
+    }
+
+    private static int[] mergeSort(int[] arr, int left, int right, long maxCount, int maxMemory) {
+        if (left == right) {
+            return new int[]{arr[left]};
+        }
+
+        comparisonCount++;
+        if (comparisonCount > maxCount) {
+            throw new RuntimeException("Превышено ограничение сравнений");
+        }
+
+        int mid = left + (right - left) / 2;
+        int[] leftArr = mergeSort(arr, left, mid, maxCount, maxMemory);
+        int[] rightArr = mergeSort(arr, mid + 1, right, maxCount, maxMemory);
+
+        return merge(leftArr, rightArr, maxCount, maxMemory);
+    }
+
+    private static int[] merge(int[] left, int[] right, long maxCount, int maxMemory) {
+        int[] result = new int[left.length + right.length];
+        memoryUsage += result.length;
+
+        if (memoryUsage > maxMemory) {
+            throw new RuntimeException("Превышено ограничение памяти");
+        }
+
+        int i = 0, j = 0, k = 0;
+
+        while (i < left.length && j < right.length) {
+            comparisonCount++;
+            if (comparisonCount > maxCount) {
+                throw new RuntimeException("Превышено ограничение сравнений");
+            }
+
+            if (left[i] <= right[j]) {
+                result[k++] = left[i++];
+            } else {
+                result[k++] = right[j++];
+            }
+        }
+
+        while (i < left.length) {
+            result[k++] = left[i++];
+        }
+
+        while (j < right.length) {
+            result[k++] = right[j++];
+        }
+
+        return result;
+    }
+
+    private static int[] heapSort(int[] arr, long maxCount) {
+        int n = arr.length;
+        int[] result = arr.clone();
+        memoryUsage += n;
+
+        for (int i = n / 2 - 1; i >= 0; i--) {
+            heapify(result, n, i, maxCount);
+        }
+
+        for (int i = n - 1; i > 0; i--) {
+            int temp = result[0];
+            result[0] = result[i];
+            result[i] = temp;
+            heapify(result, i, 0, maxCount);
+        }
+
+        return result;
+    }
+
+    private static void heapify(int[] arr, int n, int i, long maxCount) {
+        int largest = i;
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+
+        if (left < n) {
+            comparisonCount++;
+            if (comparisonCount > maxCount) {
+                throw new RuntimeException("Превышено ограничение сравнений");
+            }
+            if (arr[left] > arr[largest]) {
+                largest = left;
+            }
+        }
+
+        if (right < n) {
+            comparisonCount++;
+            if (comparisonCount > maxCount) {
+                throw new RuntimeException("Превышено ограничение сравнений");
+            }
+            if (arr[right] > arr[largest]) {
+                largest = right;
+            }
+        }
+
+        if (largest != i) {
+            int swap = arr[i];
+            arr[i] = arr[largest];
+            arr[largest] = swap;
+
+            heapify(arr, n, largest, maxCount);
+        }
+    }
+
+    private static int[] insertionSort(int[] arr, long maxCount) {
+        int[] result = arr.clone();
+        memoryUsage += arr.length;
+
+        for (int i = 1; i < result.length; i++) {
+            int key = result[i];
+            int j = i - 1;
+
+            while (j >= 0) {
+                comparisonCount++;
+                if (comparisonCount > maxCount) {
+                    throw new RuntimeException("Превышено ограничение сравнений");
+                }
+
+                if (result[j] > key) {
+                    result[j + 1] = result[j];
+                    j--;
+                } else {
+                    break;
+                }
+            }
+            result[j + 1] = key;
+        }
+
+        return result;
+    }
+
+    private static int[] parseArray(String input, String key) {
+        int start = input.indexOf(key);
+        if (start == -1) throw new RuntimeException("Не найден ключ: " + key);
+
+        start += key.length();
+        int bracketStart = input.indexOf("[", start);
+        int bracketEnd = input.indexOf("]", bracketStart);
+
+        if (bracketStart == -1 || bracketEnd == -1) {
+            throw new RuntimeException("Неверный формат массива");
+        }
+
+        String arrayStr = input.substring(bracketStart + 1, bracketEnd);
+        String[] parts = arrayStr.split(",");
+
+        int[] result = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            result[i] = Integer.parseInt(parts[i].trim());
+        }
+
+        return result;
+    }
+
+    private static int parseInt(String input, String key) {
+        int start = input.indexOf(key);
+        if (start == -1) throw new RuntimeException("Не найден ключ: " + key);
+
+        start += key.length();
+        int end = input.indexOf(" ", start);
+        if (end == -1) end = input.length();
+
+        String numStr = input.substring(start, end).trim();
+        return Integer.parseInt(numStr);
+    }
+
+    private static long parseLong(String input, String key) {
+        int start = input.indexOf(key);
+        if (start == -1) throw new RuntimeException("Не найден ключ: " + key);
+
+        start += key.length();
+        int end = input.indexOf(" ", start);
+        if (end == -1) end = input.length();
+
+        String numStr = input.substring(start, end).trim();
+        return Long.parseLong(numStr);
+    }
+}
